@@ -1,0 +1,49 @@
+name: Deploy Backend to EC2 via Docker Compose
+
+on:
+  push:
+    branches: [ "deploy" ] # Se activa estrictamente al hacer push a la rama deploy
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v3
+
+    # 1. Autenticación en Docker Hub usando tus Secrets globales
+    - name: Login to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+    # 2. Construcción y subida de la imagen del Backend a tu Docker Hub
+    - name: Build and Push Docker Image
+      run: |
+        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest .
+        docker push ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
+
+    # 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
+    - name: Deploy to EC2 via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_BACKEND_HOST }} # La IP de tu máquina de Backend
+        username: ec2-user                     # Modificado para Amazon Linux
+        key: ${{ secrets.EC2_SSH_KEY }}       # Tu llave privada .pem
+        script: |
+          # Ir al directorio del usuario en Amazon Linux
+          cd /home/ec2-user
+          
+          # Descargar la versión más reciente de la imagen que acabamos de subir
+          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
+          
+          # Detener y limpiar los contenedores viejos usando docker-compose
+          # (Asegúrate de que tu archivo docker-compose.yml esté subido en /home/ec2-user en la EC2)
+          docker-compose down || true
+          
+          # Descargar actualizaciones si el docker-compose.yml apunta a otras imágenes externas (como BD)
+          docker-compose pull
+          
+          # Levantar todo el Stack (API + Base de datos) en segundo plano
+          docker-compose up -d
