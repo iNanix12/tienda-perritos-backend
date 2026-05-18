@@ -1,14 +1,6 @@
 version: "3.8"
 
 services:
-  frontend:
-    build: ./frontend
-    container_name: tienda-frontend
-    ports:
-      - "8080:80"
-    depends_on:
-      - backend
-
   backend:
     build: ./backend
     container_name: tienda-backend
@@ -34,4 +26,4 @@ services:
       - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:
-  dbdata:
+  dbdata: # Volumen nombrado para persistencia de datos productivos
