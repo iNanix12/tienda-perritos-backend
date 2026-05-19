@@ -2,7 +2,7 @@ name: Deploy Backend to EC2 via Docker Compose
 
 on:
   push:
-    branches: [ "deploy" ] # Se activa estrictamente al hacer push a la rama deploy según rúbrica
+    branches: [ "deploy" ] # Se activa estrictamente al hacer push a la rama deploy
 
 jobs:
   build-and-deploy:
@@ -18,12 +18,12 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    # 2. Construcción y subida optimizada apuntando a la carpeta correcta
+    # 2. Construcción y subida optimizada apuntando al subdirectorio backend/
     - name: Build and Push Docker Image
       uses: docker/build-push-action@v5
       with:
-        context: ./backend             # <--- LE DICE A GITHUB QUE SE MUEVA A LA CARPETA BACKEND
-        file: ./backend/Dockerfile     # <--- APUNTA AL DOCKERFILE CORRECTO
+        context: ./backend             # Mapea la carpeta del backend donde está el package.json
+        file: ./backend/Dockerfile     # Utiliza tu Dockerfile multi-stage
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
 
@@ -35,20 +35,20 @@ jobs:
         username: ec2-user                     
         key: ${{ secrets.EC2_SSH_KEY }}       
         script: |
-          # 1. Moverse al directorio del repositorio clonado en tu servidor AWS
+          # 1. Entrar a la ubicación del repositorio en tu AWS EC2
           cd /home/ec2-user/tienda-perritos-backend
           
-          # 2. Traer el último docker-compose.yml actualizado desde GitHub
+          # 2. Bajar los cambios que acabamos de subir (el nuevo docker-compose.yml)
           git pull origin deploy
           
-          # 3. Descargar la imagen fresca que acabamos de compilar y subir a Docker Hub
+          # 3. Descargar la imagen fresca desde Docker Hub
           docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
           
-          # 4. Detener y limpiar los contenedores previos
+          # 4. Detener los servicios previos de forma limpia
           docker-compose down || true
           
-          # 5. Descargar actualizaciones adicionales si existen (ej: mysql)
+          # 5. Forzar la descarga de otras imágenes necesarias (como mysql)
           docker-compose pull
           
-          # 6. Levantar todo el stack en segundo plano
+          # 6. Levantar todo el stack en segundo plano de forma limpia
           docker-compose up -d
