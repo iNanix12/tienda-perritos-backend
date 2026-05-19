@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    image: ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest #  Apunta a tu Docker Hub en lugar de 'build'
+    image: iNanix12/tienda-backend:latest  # <-- Cambiado 'build: ./backend' por la imagen remota
     container_name: tienda-backend
     environment:
       DB_HOST: db
