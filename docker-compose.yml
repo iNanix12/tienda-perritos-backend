@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    build: ./backend
+    image: ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest #  Apunta a tu Docker Hub en lugar de 'build'
     container_name: tienda-backend
     environment:
       DB_HOST: db
