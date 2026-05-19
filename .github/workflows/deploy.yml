@@ -21,6 +21,7 @@ jobs:
     # 2. Construcción y subida de la imagen del Backend a tu Docker Hub
     - name: Build and Push Docker Image
       run: |
+        cd backend
         docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest .
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
 
