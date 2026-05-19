@@ -35,20 +35,14 @@ jobs:
         username: ec2-user                     
         key: ${{ secrets.EC2_SSH_KEY }}       
         script: |
-          # 1. Entrar a la ubicación del repositorio en tu AWS EC2
           cd /home/ec2-user/tienda-perritos-backend
-          
-          # 2. Bajar los cambios que acabamos de subir (el nuevo docker-compose.yml)
           git pull origin deploy
           
-          # 3. Descargar la imagen fresca desde Docker Hub
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
+          # Definimos la variable en la sesión SSH usando el secret de GitHub
+          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
           
-          # 4. Detener los servicios previos de forma limpia
+          # Ahora sí, descargamos y levantamos con la variable cargada en memoria
+          docker pull $DOCKERHUB_USERNAME/tienda-backend:latest
           docker-compose down || true
-          
-          # 5. Forzar la descarga de otras imágenes necesarias (como mysql)
           docker-compose pull
-          
-          # 6. Levantar todo el stack en segundo plano de forma limpia
           docker-compose up -d
