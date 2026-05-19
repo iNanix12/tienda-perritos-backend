@@ -27,7 +27,7 @@ jobs:
         push: true
         tags: ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
 
-    # 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
+ 	# 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
     - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@master
       with:
@@ -46,3 +46,5 @@ jobs:
           docker-compose down || true
           docker-compose pull
           docker-compose up -d
+
+
