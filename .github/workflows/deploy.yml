@@ -2,7 +2,7 @@ name: Deploy Backend to EC2 via Docker Compose
 
 on:
   push:
-    branches: [ "deploy" ] # Se activa estrictamente al hacer push a la rama deploy
+    branches: [ "deploy" ] # Se activa estrictamente al hacer push a la rama deploy según rúbrica
 
 jobs:
   build-and-deploy:
@@ -18,32 +18,37 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-    # 2. Construcción y subida de la imagen del Backend a tu Docker Hub
+    # 2. Construcción y subida optimizada apuntando a la carpeta correcta
     - name: Build and Push Docker Image
-      run: |
-        docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest .
-        docker push ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
+      uses: docker/build-push-action@v5
+      with:
+        context: ./backend             # <--- LE DICE A GITHUB QUE SE MUEVA A LA CARPETA BACKEND
+        file: ./backend/Dockerfile     # <--- APUNTA AL DOCKERFILE CORRECTO
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
 
     # 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
     - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@master
       with:
-        host: ${{ secrets.EC2_BACKEND_HOST }} # La IP de tu máquina de Backend
-        username: ec2-user                     # Modificado para Amazon Linux
-        key: ${{ secrets.EC2_SSH_KEY }}       # Tu llave privada .pem
+        host: ${{ secrets.EC2_BACKEND_HOST }} 
+        username: ec2-user                     
+        key: ${{ secrets.EC2_SSH_KEY }}       
         script: |
-          # Ir al directorio del usuario en Amazon Linux
-          cd /home/ec2-user
+          # 1. Moverse al directorio del repositorio clonado en tu servidor AWS
+          cd /home/ec2-user/tienda-perritos-backend
           
-          # Descargar la versión más reciente de la imagen que acabamos de subir
+          # 2. Traer el último docker-compose.yml actualizado desde GitHub
+          git pull origin deploy
+          
+          # 3. Descargar la imagen fresca que acabamos de compilar y subir a Docker Hub
           docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
           
-          # Detener y limpiar los contenedores viejos usando docker-compose
-          # (Asegúrate de que tu archivo docker-compose.yml esté subido en /home/ec2-user en la EC2)
+          # 4. Detener y limpiar los contenedores previos
           docker-compose down || true
           
-          # Descargar actualizaciones si el docker-compose.yml apunta a otras imágenes externas (como BD)
+          # 5. Descargar actualizaciones adicionales si existen (ej: mysql)
           docker-compose pull
           
-          # Levantar todo el Stack (API + Base de datos) en segundo plano
+          # 6. Levantar todo el stack en segundo plano
           docker-compose up -d
