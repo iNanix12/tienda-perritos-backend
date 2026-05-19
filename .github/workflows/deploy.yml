@@ -24,24 +24,22 @@ jobs:
         docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest .
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
 
- 	# 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
+    # 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
     - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@master
       with:
-        host: ${{ secrets.EC2_BACKEND_HOST }} 
-        username: ec2-user                     
-        key: ${{ secrets.EC2_SSH_KEY }}       
+        host: ${{ secrets.EC2_BACKEND_HOST }}
+        username: ec2-user
+        key: ${{ secrets.EC2_SSH_KEY }}
         script: |
           cd /home/ec2-user/tienda-perritos-backend
           git pull origin deploy
-          
+
           # Definimos la variable en la sesión SSH usando el secret de GitHub
           export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-          
+
           # Ahora sí, descargamos y levantamos con la variable cargada en memoria
           docker pull $DOCKERHUB_USERNAME/tienda-backend:latest
           docker-compose down || true
           docker-compose pull
           docker-compose up -d
-
-
