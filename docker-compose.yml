@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   backend:
-    build: ./backend
+    image: ${DOCKERHUB_USERNAME}/tienda-backend:latest # <-- Cambiado a variable estándar de Linux
     container_name: tienda-backend
     environment:
       DB_HOST: db

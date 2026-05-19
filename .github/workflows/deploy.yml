@@ -24,26 +24,24 @@ jobs:
         docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest .
         docker push ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
 
-    # 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
+ 	# 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
     - name: Deploy to EC2 via SSH
       uses: appleboy/ssh-action@master
       with:
-        host: ${{ secrets.EC2_BACKEND_HOST }} # La IP de tu máquina de Backend
-        username: ec2-user                     # Modificado para Amazon Linux
-        key: ${{ secrets.EC2_SSH_KEY }}       # Tu llave privada .pem
+        host: ${{ secrets.EC2_BACKEND_HOST }} 
+        username: ec2-user                     
+        key: ${{ secrets.EC2_SSH_KEY }}       
         script: |
-          # Ir al directorio del usuario en Amazon Linux
-          cd /home/ec2-user
+          cd /home/ec2-user/tienda-perritos-backend
+          git pull origin deploy
           
-          # Descargar la versión más reciente de la imagen que acabamos de subir
-          docker pull ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
+          # Definimos la variable en la sesión SSH usando el secret de GitHub
+          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
           
-          # Detener y limpiar los contenedores viejos usando docker-compose
-          # (Asegúrate de que tu archivo docker-compose.yml esté subido en /home/ec2-user en la EC2)
+          # Ahora sí, descargamos y levantamos con la variable cargada en memoria
+          docker pull $DOCKERHUB_USERNAME/tienda-backend:latest
           docker-compose down || true
-          
-          # Descargar actualizaciones si el docker-compose.yml apunta a otras imágenes externas (como BD)
           docker-compose pull
-          
-          # Levantar todo el Stack (API + Base de datos) en segundo plano
           docker-compose up -d
+
+
