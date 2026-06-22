@@ -1,48 +1,43 @@
-name: Deploy Backend to EC2 via Docker Compose
+name: Deploy Backend to Amazon ECS
 
 on:
   push:
-    branches: [ "deploy" ] # Se activa estrictamente al hacer push a la rama deploy
+    branches: [ "main" ] # Cambia a master si esa es tu rama principal
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: tienda-perritos-backend
+  ECS_CLUSTER: cluster-tienda-perritos-v2
+  ECS_SERVICE: srv-tienda-perritos-backend
 
 jobs:
-  build-and-deploy:
+  deploy:
+    name: Build, Push and Deploy Backend
     runs-on: ubuntu-latest
+
     steps:
     - name: Checkout Code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
-    # 1. Autenticación en Docker Hub usando tus Secrets globales
-    - name: Login to Docker Hub
-      uses: docker/login-action@v2
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v4
       with:
-        username: ${{ secrets.DOCKERHUB_USERNAME }}
-        password: ${{ secrets.DOCKERHUB_TOKEN }}
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+        aws-region: ${{ env.AWS_REGION }}
 
-    # 2. Construcción y subida optimizada apuntando al subdirectorio backend/
-    - name: Build and Push Docker Image
-      uses: docker/build-push-action@v5
-      with:
-        context: ./backend             # Mapea la carpeta del backend donde está el package.json
-        file: ./backend/Dockerfile     # Utiliza tu Dockerfile multi-stage
-        push: true
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/tienda-backend:latest
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
 
-    # 3. Despliegue en la EC2 mediante SSH aplicando Docker Compose
-    - name: Deploy to EC2 via SSH
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.EC2_BACKEND_HOST }} 
-        username: ec2-user                     
-        key: ${{ secrets.EC2_SSH_KEY }}       
-        script: |
-          cd /home/ec2-user/tienda-perritos-backend
-          git pull origin deploy
-          
-          # Definimos la variable en la sesión SSH usando el secret de GitHub
-          export DOCKERHUB_USERNAME="${{ secrets.DOCKERHUB_USERNAME }}"
-          
-          # Ahora sí, descargamos y levantamos con la variable cargada en memoria
-          docker pull $DOCKERHUB_USERNAME/tienda-backend:latest
-          docker-compose down || true
-          docker-compose pull
-          docker-compose up -d
+    - name: Build and Push Image
+      env:
+        ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+      run: |
+        docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest .
+        docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
+
+    - name: Force ECS Deployment
+      run: |
+        aws ecs update-service --cluster ${{ env.ECS_CLUSTER }} --service ${{ env.ECS_SERVICE }} --force-new-deployment
