@@ -35,7 +35,7 @@ jobs:
       env:
         ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-        docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest .
+        docker build -t $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest ./backend
         docker push $ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:latest
 
     - name: Force ECS Deployment
