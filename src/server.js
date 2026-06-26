@@ -11,9 +11,10 @@ const {
   DB_PASSWORD = "admin123",
   DB_NAME = "tienda_perritos",
   DB_PORT = 3306,
+  CORS_ORIGIN = "*",
 } = process.env;
 
-app.use(cors());
+app.use(cors({ origin: CORS_ORIGIN }));
 app.use(express.json());
 
 let pool;
@@ -31,9 +32,13 @@ async function initDb() {
       connectionLimit: 10,
       queueLimit: 0,
     });
-    console.log("Pool de conexiones MySQL inicializado.");
+    // Verifica que la conexión realmente funcione al iniciar
+    const conn = await pool.getConnection();
+    await conn.ping();
+    conn.release();
+    console.log("Pool de conexiones MySQL inicializado y verificado.");
   } catch (err) {
-    console.error("Error al inicializar pool de MySQL:", err);
+    console.error("Error al inicializar pool de MySQL:", err.message);
   }
 }
 
@@ -46,7 +51,9 @@ function handleError(res, error, message = "Error interno del servidor") {
 // Obtener todos los productos
 app.get("/api/productos", async (req, res) => {
   try {
-    const [rows] = await pool.query("SELECT id, nombre, descripcion, precio, stock FROM productos ORDER BY id DESC");
+    const [rows] = await pool.query(
+      "SELECT id, nombre, descripcion, precio, stock FROM productos ORDER BY id DESC"
+    );
     res.json(rows);
   } catch (err) {
     handleError(res, err, "No se pudieron obtener los productos.");
@@ -57,7 +64,10 @@ app.get("/api/productos", async (req, res) => {
 app.get("/api/productos/:id", async (req, res) => {
   const { id } = req.params;
   try {
-    const [rows] = await pool.query("SELECT id, nombre, descripcion, precio, stock FROM productos WHERE id = ?", [id]);
+    const [rows] = await pool.query(
+      "SELECT id, nombre, descripcion, precio, stock FROM productos WHERE id = ?",
+      [id]
+    );
     if (rows.length === 0) {
       return res.status(404).json({ message: "Producto no encontrado." });
     }
@@ -81,7 +91,10 @@ app.post("/api/productos", async (req, res) => {
       [nombre, descripcion || null, precio, stock]
     );
     const nuevoId = result.insertId;
-    const [rows] = await pool.query("SELECT id, nombre, descripcion, precio, stock FROM productos WHERE id = ?", [nuevoId]);
+    const [rows] = await pool.query(
+      "SELECT id, nombre, descripcion, precio, stock FROM productos WHERE id = ?",
+      [nuevoId]
+    );
     res.status(201).json(rows[0]);
   } catch (err) {
     handleError(res, err, "No se pudo crear el producto.");
@@ -107,7 +120,10 @@ app.put("/api/productos/:id", async (req, res) => {
       return res.status(404).json({ message: "Producto no encontrado." });
     }
 
-    const [rows] = await pool.query("SELECT id, nombre, descripcion, precio, stock FROM productos WHERE id = ?", [id]);
+    const [rows] = await pool.query(
+      "SELECT id, nombre, descripcion, precio, stock FROM productos WHERE id = ?",
+      [id]
+    );
     res.json(rows[0]);
   } catch (err) {
     handleError(res, err, "No se pudo actualizar el producto.");
@@ -128,13 +144,22 @@ app.delete("/api/productos/:id", async (req, res) => {
   }
 });
 
-// Endpoint de salud
-app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", message: "Backend de tienda de perritos en ejecución." });
+// Endpoint de salud (usado por monitoreo y por el health check de Docker)
+app.get("/api/health", async (req, res) => {
+  try {
+    if (pool) {
+      const conn = await pool.getConnection();
+      await conn.ping();
+      conn.release();
+    }
+    res.json({ status: "ok", message: "Backend de tienda de perritos en ejecución.", db: "ok" });
+  } catch (err) {
+    res.status(503).json({ status: "degraded", message: "Backend activo pero sin conexión a BD.", db: "error" });
+  }
 });
 
 // Iniciar servidor
-app.listen(PORT, async () => {
+app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Servidor backend escuchando en puerto ${PORT}`);
   await initDb();
 });
