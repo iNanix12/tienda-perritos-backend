@@ -7,12 +7,13 @@ on:
 env:
   AWS_REGION: us-east-1
   IMAGE_TAG: ${{ github.sha }}
+  ECS_CLUSTER: tienda-perritos-cluster
+  # 1. Asegúrate de que este nombre coincida exactamente con tu servicio de backend
+  ECS_SERVICE: tienda-perritos-backend-service 
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      image_uri: ${{ steps.build.outputs.image_uri }}
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
@@ -29,15 +30,15 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build y push de la imagen
-        id: build
+      - name: Build y push de la imagen del Backend
         env:
-          REPO_URI: ${{ secrets.ECR_REPOSITORY_URI }}
+          # 2. Si usas el mismo secreto de URI, asegúrate de que apunte al repositorio correcto del backend, 
+          # o crea uno nuevo llamado ECR_BACKEND_REPOSITORY_URI
+          REPO_URI: ${{ secrets.ECR_BACKEND_REPOSITORY_URI }} 
         run: |
           docker build -t $REPO_URI:$IMAGE_TAG -t $REPO_URI:latest .
           docker push $REPO_URI:$IMAGE_TAG
           docker push $REPO_URI:latest
-          echo "image_uri=$REPO_URI:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
 
   deploy:
     needs: build-and-push
@@ -51,39 +52,15 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login en Amazon ECR (para que la EC2 pueda hacer pull)
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Forzar nuevo despliegue en ECS Fargate (Backend)
+        run: |
+          aws ecs update-service \
+            --cluster $ECS_CLUSTER \
+            --service $ECS_SERVICE \
+            --force-new-deployment
 
-      - name: Desplegar en EC2 backend por SSH
-        uses: appleboy/ssh-action@v1.0.3
-        env:
-          REPO_URI: ${{ secrets.ECR_REPOSITORY_URI }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
-          DB_HOST: ${{ secrets.DB_HOST }}
-          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-          FRONTEND_ORIGIN: ${{ secrets.FRONTEND_ORIGIN }}
-        with:
-          host: ${{ secrets.EC2_BACKEND_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          envs: REPO_URI,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,DB_HOST,DB_PASSWORD,FRONTEND_ORIGIN
-          script: |
-            aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $(echo $REPO_URI | cut -d'/' -f1)
-            docker pull $REPO_URI:latest
-            docker stop tienda-backend || true
-            docker rm tienda-backend || true
-            docker run -d \
-              --name tienda-backend \
-              --restart unless-stopped \
-              -p 3001:3001 \
-              -e DB_HOST="$DB_HOST" \
-              -e DB_USER=root \
-              -e DB_PASSWORD="$DB_PASSWORD" \
-              -e DB_NAME=tienda_perritos \
-              -e DB_PORT=3306 \
-              -e CORS_ORIGIN="$FRONTEND_ORIGIN" \
-              $REPO_URI:latest
-            docker image prune -f
+      - name: Esperar a que el servicio quede estable
+        run: |
+          aws ecs wait services-stable \
+            --cluster $ECS_CLUSTER \
+            --services $ECS_SERVICE
