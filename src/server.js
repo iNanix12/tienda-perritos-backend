@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 
+const fs = require("fs");
+const path = require("path"):
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -19,9 +22,47 @@ app.use(express.json());
 
 let pool;
 
-// Inicializar pool de conexiones
+async function ejecutarScriptInit() {
+  let conexionInicial;
+  try {
+    conexionInicial = await mysql.createConnection({
+      host: DB_HOST,
+      user: DB_USER,
+      password: DB_PASSWORD,
+      port: DB_PORT,
+    });
+
+    const rutaSql = path.join(__dirname, "..", "init.sql");
+
+    if (fs.existsSync(rutaSql)) {
+      console.log("=== 🐶 AWS RDS: Leyendo archivo init.sql ===");
+      const scriptSql = fs.readFileSync(rutaSql, "utf8");
+      const consultas = scriptSql.split(";").map(q => q.trim()).filter(q => q.length > 0);
+
+      for (const consulta of consultas) {
+        try {
+          await conexionInicial.query(consulta);
+        } catch (queryErr) {
+          if (!queryErr.message.includes("already exists") && !queryErr.message.includes("Duplicate entry")) {
+            console.error("⚠️ Error en consulta:", queryErr.message);
+          }
+        }
+      }
+      console.log("=== 🐶 AWS RDS: Inicialización completada ===");
+    }
+  } catch (err) {
+    console.error("❌ Error inicializando la BD:", err.message);
+  } finally {
+    if (conexionInicial) await conexionInicial.end();
+  }
+}
+
 async function initDb() {
   try {
+    // 1. LLAMAR A LA NUEVA FUNCIÓN AQUÍ
+    await ejecutarScriptInit();
+
+    // 2. EL RESTO DE TU CÓDIGO SIGUE IGUAL...
     pool = mysql.createPool({
       host: DB_HOST,
       user: DB_USER,
@@ -32,11 +73,11 @@ async function initDb() {
       connectionLimit: 10,
       queueLimit: 0,
     });
-    // Verifica que la conexión realmente funcione al iniciar
+
     const conn = await pool.getConnection();
     await conn.ping();
     conn.release();
-    console.log("Pool de conexiones MySQL inicializado y verificado.");
+    console.log("Pool de conexiones MySQL inicializado.");
   } catch (err) {
     console.error("Error al inicializar pool de MySQL:", err.message);
   }
