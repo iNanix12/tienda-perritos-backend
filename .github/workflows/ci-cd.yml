@@ -34,7 +34,7 @@ jobs:
         env:
           # 2. Si usas el mismo secreto de URI, asegúrate de que apunte al repositorio correcto del backend, 
           # o crea uno nuevo llamado ECR_BACKEND_REPOSITORY_URI
-          REPO_URI: ${{ secrets.ECR_BACKEND_REPOSITORY_URI }} 
+          REPO_URI: ${{ secrets.ECR_REPOSITORY_URI }} 
         run: |
           docker build -t $REPO_URI:$IMAGE_TAG -t $REPO_URI:latest .
           docker push $REPO_URI:$IMAGE_TAG
