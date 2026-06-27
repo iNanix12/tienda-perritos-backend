@@ -98,10 +98,6 @@ async function ejecutarScriptInit() {
 
 async function initDb() {
   try {
-    // 1. LLAMAR A LA NUEVA FUNCIÓN AQUÍ
-    await ejecutarScriptInit();
-
-    // 2. EL RESTO DE TU CÓDIGO SIGUE IGUAL...
     pool = mysql.createPool({
       host: DB_HOST,
       user: DB_USER,
@@ -116,7 +112,7 @@ async function initDb() {
     const conn = await pool.getConnection();
     await conn.ping();
     conn.release();
-    console.log("Pool de conexiones MySQL inicializado.");
+    console.log("Pool de conexiones MySQL inicializado y verificado.");
   } catch (err) {
     console.error("Error al inicializar pool de MySQL:", err.message);
   }
@@ -239,7 +235,13 @@ app.get("/api/health", async (req, res) => {
 });
 
 // Iniciar servidor
+// Iniciar servidor de manera sincronizada y ordenada
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Servidor backend escuchando en puerto ${PORT}`);
-  await initDb();
+  
+  // 1. ESPERAMOS que cree la base de datos y la tabla obligatoriamente primero
+  await ejecutarScriptInit(); 
+  
+  // 2. RECIÉN DESPUÉS inicializamos el pool de Express
+  await initDb(); 
 });
