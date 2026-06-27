@@ -2,9 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 
-const fs = require("fs");
-const path = require("path"):
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -22,6 +19,8 @@ app.use(express.json());
 
 let pool;
 
+// Crea la base de datos (si no existe), la tabla y los datos de ejemplo.
+// Se ejecuta una sola vez al arrancar el servidor.
 async function ejecutarScriptInit() {
   let conexionInicial;
   try {
@@ -32,15 +31,11 @@ async function ejecutarScriptInit() {
       port: DB_PORT,
     });
 
-    console.log("=== 🐶 Asegurando base de datos y tablas ===");
-    
-    // 1. Crear la base de datos si no existe
-    await conexionInicial.query("CREATE DATABASE IF NOT EXISTS tienda_perritos;");
-    
-    // 2. Seleccionar la base de datos
-    await conexionInicial.query("USE tienda_perritos;");
-    
-    // 3. Crear la tabla exactamente como la busca el GET de Express
+    console.log("=== Asegurando base de datos y tablas ===");
+
+    await conexionInicial.query(`CREATE DATABASE IF NOT EXISTS ${DB_NAME};`);
+    await conexionInicial.query(`USE ${DB_NAME};`);
+
     await conexionInicial.query(`
       CREATE TABLE IF NOT EXISTS productos (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -51,51 +46,26 @@ async function ejecutarScriptInit() {
       );
     `);
 
-    // 4. Insertar datos de prueba solo si la tabla está vacía
     const [rows] = await conexionInicial.query("SELECT COUNT(*) as total FROM productos;");
     if (rows[0].total === 0) {
       await conexionInicial.query(`
-        INSERT INTO productos (nombre, descripcion, precio, stock) VALUES 
+        INSERT INTO productos (nombre, descripcion, precio, stock) VALUES
         ('Alimento Cachorro Premium', 'Sabor pollo para cachorros', 19990, 15),
         ('Alimento Adulto Light', 'Ideal para perritos con sobrepeso', 24990, 10),
         ('Snacks Dentales', 'Cuidado sarro pack de 4 unidades', 4990, 50);
       `);
-      console.log("=== 🐶 Productos iniciales insertados con éxito ===");
+      console.log("=== Productos iniciales insertados con éxito ===");
     }
 
-    console.log("=== 🐶 AWS RDS: Todo listo y verificado ===");
+    console.log("=== Base de datos verificada y lista ===");
   } catch (err) {
-    console.error("❌ Error en inicialización forzada:", err.message);
+    console.error("Error en inicialización de la base de datos:", err.message);
   } finally {
     if (conexionInicial) await conexionInicial.end();
   }
 }
 
-    const rutaSql = path.join(__dirname, "..", "init.sql");
-
-    if (fs.existsSync(rutaSql)) {
-      console.log("=== 🐶 AWS RDS: Leyendo archivo init.sql ===");
-      const scriptSql = fs.readFileSync(rutaSql, "utf8");
-      const consultas = scriptSql.split(";").map(q => q.trim()).filter(q => q.length > 0);
-
-      for (const consulta of consultas) {
-        try {
-          await conexionInicial.query(consulta);
-        } catch (queryErr) {
-          if (!queryErr.message.includes("already exists") && !queryErr.message.includes("Duplicate entry")) {
-            console.error("⚠️ Error en consulta:", queryErr.message);
-          }
-        }
-      }
-      console.log("=== 🐶 AWS RDS: Inicialización completada ===");
-    }
-  } catch (err) {
-    console.error("❌ Error inicializando la BD:", err.message);
-  } finally {
-    if (conexionInicial) await conexionInicial.end();
-  }
-}
-
+// Inicializar pool de conexiones para uso normal de la API
 async function initDb() {
   try {
     pool = mysql.createPool({
@@ -118,13 +88,11 @@ async function initDb() {
   }
 }
 
-// Helper para manejar errores
 function handleError(res, error, message = "Error interno del servidor") {
   console.error(error);
   res.status(500).json({ message });
 }
 
-// Obtener todos los productos
 app.get("/api/productos", async (req, res) => {
   try {
     const [rows] = await pool.query(
@@ -136,7 +104,6 @@ app.get("/api/productos", async (req, res) => {
   }
 });
 
-// Obtener un producto por ID
 app.get("/api/productos/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -153,7 +120,6 @@ app.get("/api/productos/:id", async (req, res) => {
   }
 });
 
-// Crear un nuevo producto
 app.post("/api/productos", async (req, res) => {
   const { nombre, descripcion, precio, stock } = req.body;
 
@@ -177,7 +143,6 @@ app.post("/api/productos", async (req, res) => {
   }
 });
 
-// Actualizar un producto
 app.put("/api/productos/:id", async (req, res) => {
   const { id } = req.params;
   const { nombre, descripcion, precio, stock } = req.body;
@@ -206,7 +171,6 @@ app.put("/api/productos/:id", async (req, res) => {
   }
 });
 
-// Eliminar un producto
 app.delete("/api/productos/:id", async (req, res) => {
   const { id } = req.params;
   try {
@@ -220,7 +184,6 @@ app.delete("/api/productos/:id", async (req, res) => {
   }
 });
 
-// Endpoint de salud (usado por monitoreo y por el health check de Docker)
 app.get("/api/health", async (req, res) => {
   try {
     if (pool) {
@@ -234,14 +197,9 @@ app.get("/api/health", async (req, res) => {
   }
 });
 
-// Iniciar servidor
-// Iniciar servidor de manera sincronizada y ordenada
+// Iniciar servidor: primero asegura la base de datos, luego abre el pool de la API
 app.listen(PORT, "0.0.0.0", async () => {
   console.log(`Servidor backend escuchando en puerto ${PORT}`);
-  
-  // 1. ESPERAMOS que cree la base de datos y la tabla obligatoriamente primero
-  await ejecutarScriptInit(); 
-  
-  // 2. RECIÉN DESPUÉS inicializamos el pool de Express
-  await initDb(); 
+  await ejecutarScriptInit();
+  await initDb();
 });
