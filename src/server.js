@@ -32,6 +32,45 @@ async function ejecutarScriptInit() {
       port: DB_PORT,
     });
 
+    console.log("=== 🐶 Asegurando base de datos y tablas ===");
+    
+    // 1. Crear la base de datos si no existe
+    await conexionInicial.query("CREATE DATABASE IF NOT EXISTS tienda_perritos;");
+    
+    // 2. Seleccionar la base de datos
+    await conexionInicial.query("USE tienda_perritos;");
+    
+    // 3. Crear la tabla exactamente como la busca el GET de Express
+    await conexionInicial.query(`
+      CREATE TABLE IF NOT EXISTS productos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nombre VARCHAR(255) NOT NULL,
+        descripcion TEXT,
+        precio DECIMAL(10,2) NOT NULL,
+        stock INT NOT NULL
+      );
+    `);
+
+    // 4. Insertar datos de prueba solo si la tabla está vacía
+    const [rows] = await conexionInicial.query("SELECT COUNT(*) as total FROM productos;");
+    if (rows[0].total === 0) {
+      await conexionInicial.query(`
+        INSERT INTO productos (nombre, descripcion, precio, stock) VALUES 
+        ('Alimento Cachorro Premium', 'Sabor pollo para cachorros', 19990, 15),
+        ('Alimento Adulto Light', 'Ideal para perritos con sobrepeso', 24990, 10),
+        ('Snacks Dentales', 'Cuidado sarro pack de 4 unidades', 4990, 50);
+      `);
+      console.log("=== 🐶 Productos iniciales insertados con éxito ===");
+    }
+
+    console.log("=== 🐶 AWS RDS: Todo listo y verificado ===");
+  } catch (err) {
+    console.error("❌ Error en inicialización forzada:", err.message);
+  } finally {
+    if (conexionInicial) await conexionInicial.end();
+  }
+}
+
     const rutaSql = path.join(__dirname, "..", "init.sql");
 
     if (fs.existsSync(rutaSql)) {
